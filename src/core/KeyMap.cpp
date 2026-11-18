@@ -55,12 +55,18 @@ std::vector<Action> makeActions()
         // plays from there when stopped; the position clicked on a ruler is ignored (issue #11)
         { "transport.playFromStart", TR_NOOP ("Play, or stop at the start of the song or pattern"), Context::global, { chord (space, shift) } },
         { "transport.toggleMode", TR_NOOP ("Pattern / song mode"), Context::global, { chord ('L') }, true },
+        // upstream issue #195: Home jumps to the start of the song (or pattern) and keeps playing if it was playing;
+        // the editors' own Home keys (Ctrl+Alt+Home in the Piano Roll / Playlist) still win while they are focused
+        { "transport.goToStart", TR_NOOP ("Jump to the start of the song or pattern"), Context::global, { chord (home) } },
+        { "transport.goToEnd", TR_NOOP ("Jump to the end of the song or pattern"), Context::global, { chord (end) } },
         { "transport.nextMarker", TR_NOOP ("Jump to the next song marker (Quantize song jumps while playing)"), Context::global, { chord (numpadMultiply, alt) } },
         { "transport.previousMarker", TR_NOOP ("Jump to the previous song marker"), Context::global, { chord (numpadDivide, alt) } },
         { "view.typingPiano", TR_NOOP ("Typing keyboard to piano on/off"), Context::global, { chord ('T', ctrl) } },
         // FL's Options › Switches › "Multilink to controllers" (OptionsToggleMultiLinkAction, Ctrl+J; round 177b-4)
         { "options.multilink", TR_NOOP ("Multilink to controllers on/off"), Context::global, { chord ('J', ctrl) } },
         { "view.toolbar", TR_NOOP ("Show or hide the toolbar panels"), Context::global, { chord (f11, ctrl) } },
+        // upstream issue #181: Ctrl+, opens Settings (the usual Preferences key; again = closed)
+        { "view.settings", TR_NOOP ("Settings (press again to close)"), Context::global, { chord (',', ctrl) } },
         { "view.audioEditor", TR_NOOP ("Open the audio editor"), Context::global, {} },
         { "view.tempoTapper", TR_NOOP ("Tempo tapper (tap the tempo)"), Context::global, { chord (f5, ctrl) } },
         { "view.sampleBrowser", TR_NOOP ("Sample browser (separate window)"), Context::global, {} },

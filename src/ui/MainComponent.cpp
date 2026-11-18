@@ -2050,6 +2050,7 @@ bool MainComponent::runAction (const std::string& id)
     else if (is ("pattern.next")) selectPattern (stepPattern (engine.getSong(), 1));
     else if (is ("pattern.previous")) selectPattern (stepPattern (engine.getSong(), -1));
     else if (is ("pattern.nextEmpty")) nextEmptyPattern();
+    else if (is ("pattern.firstEmpty") && isNameAndColourDialogOpen()) {}
     else if (is ("pattern.firstEmpty")) { engine.editSong ([] (Song& s) { gotoFirstEmptyPattern (s); }); showRenamePattern (engine.getSong().currentPattern); }
     else if (is ("pattern.nextEmptyNoName")) engine.editSong ([] (Song& s) { gotoNextEmptyPattern (s); });
     else if (is ("pattern.delete")) deleteCurrentPattern();
@@ -2184,6 +2185,29 @@ bool MainComponent::runAction (const std::string& id)
             case keys::SettingsKey::switchPage: switchSettingsPage (page); break;
             case keys::SettingsKey::open: openSettings ((int) page); break;
         }
+    }
+    else if (is ("view.settings"))
+    {
+        // upstream issue #181: Ctrl+, opens Settings on its General page; again = closed
+        if (shownSettingsPage() >= 0)
+            closeSettings();
+        else
+            openSettings ((int) SettingsPage::general);
+    }
+    else if (is ("transport.goToStart") || is ("transport.goToEnd"))
+    {
+        // upstream issue #195: Home / End jump to the start / end of the song (Song mode) or the current pattern;
+        // playback keeps running from there, and a later Stop or Space comes back to the new position
+        const auto& song = engine.getSong();
+        const auto toEnd = is ("transport.goToEnd");
+        double target = 0.0;
+        if (toEnd)
+            target = (double) (song.mode == PlayMode::song ? song.songLength() : song.activePattern().effectiveLength (song.meter()));
+        if (target > 0.0)
+            engine.seek (target);
+        else
+            engine.rewind();
+        playStartTicks = target;
     }
     else if (is ("view.closeUnfocusedWindows")) closeUnfocusedWindows();
     else if (is ("view.alignChannelEditors")) alignAllChannelEditors (engine.getSelectedChannel());
@@ -2695,6 +2719,10 @@ void MainComponent::loadUiSettings()
             ChannelRackComponent::completePreview.store (on);
         else if (key == "rememberSeekTime") // (issue #169: the old "rememberSeek" key held LYNX's old default, off; FL's is on)
             EditorGlobals::get().rememberSeek = on;
+        else if (key == "prPreviewWhilePlaying")
+            EditorGlobals::get().previewNotesWhilePlaying = on;
+        else if (key == "prHighlightSelectedRows")
+            EditorGlobals::get().highlightSelectedRows = on;
         else if (key == "createVariants")
             EditorGlobals::get().createVariants = on;
         else if (key == "plLeftResizing") // round 189g: FL's Playlist Edit / Select options
@@ -2993,6 +3021,8 @@ void MainComponent::saveUiSettings()
                                       + "\npluginStyle=" + juce::String (skin::forcedStyle() < 0 ? "Automatic" : skin::styleName ((skin::Style) skin::forcedStyle()))
                                       + "\npluginStyleOverrides=" + skin::overridesToString()
                                       + "\nrememberSeekTime=" + juce::String (EditorGlobals::get().rememberSeek ? 1 : 0)
+                                      + "\nprPreviewWhilePlaying=" + juce::String (EditorGlobals::get().previewNotesWhilePlaying ? 1 : 0)
+                                      + "\nprHighlightSelectedRows=" + juce::String (EditorGlobals::get().highlightSelectedRows ? 1 : 0)
                                       + "\ncreateVariants=" + juce::String (EditorGlobals::get().createVariants ? 1 : 0)
                                       + "\nplLeftResizing=" + juce::String (EditorGlobals::get().leftResizing ? 1 : 0)
                                       + "\nplWheelNudging=" + juce::String (EditorGlobals::get().wheelNudging ? 1 : 0)
@@ -3996,6 +4026,8 @@ void MainComponent::stepPatternFromSelector (int delta)
 
 void MainComponent::nextEmptyPattern()
 {
+    if (isNameAndColourDialogOpen()) // (upstream issue #179: F4 again while naming doesn't skip ahead)
+        return;
     engine.editSong ([] (Song& s) { gotoNextEmptyPattern (s); });
     showRenamePattern (engine.getSong().currentPattern);
 }

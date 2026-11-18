@@ -55,6 +55,8 @@
 #include "ui/AudioEditor.h"
 #include "ui/Dialogs.h"
 #include "ui/QuickPick.h"
+#include "ui/QuickAddPalette.h"
+#include "ui/ToolWindow.h"
 #include "ui/TrackIcons.h"
 #include "core/TrackIcons.h"
 
@@ -3211,16 +3213,21 @@ juce::PopupMenu MixerStrips::buildMenu (int t)
     const auto targets = std::find (selection.begin(), selection.end(), t) != selection.end() ? selection : std::vector<int> { t };
     const auto trackName = juce::String::fromUTF8 (song.mixer[(std::size_t) t].name.c_str());
 
-    auto rename = [this, t] {
+    auto rename = [this, t, targets] {
         if (t >= (int) engine.getSong().mixer.size())
             return;
         const auto& track = engine.getSong().mixer[(std::size_t) t];
         showNameAndColourDialog (tr ("Rename track"), juce::String::fromUTF8 (track.name.c_str()), track.colour,
-                                 [this, t] (const juce::String& name, std::uint32_t colour) {
+                                 [this, t, targets] (const juce::String& name, std::uint32_t colour) {
                                      if (t < (int) engine.getSong().mixer.size())
-                                         engine.editSong ([t, n = name.trim().toStdString(), colour] (Song& s) {
+                                         engine.editSong ([t, targets, n = name.trim().toStdString(), colour] (Song& s) {
                                              if (! n.empty())
                                                  s.mixer[(std::size_t) t].name = n;
+                                             // upstream issue #201: F2 with several tracks selected colours all of
+                                             // them (the name stays the clicked track's)
+                                             for (const auto other : targets)
+                                                 if (other >= 0 && other < (int) s.mixer.size())
+                                                     s.mixer[(std::size_t) other].colour = colour;
                                              s.mixer[(std::size_t) t].colour = colour;
                                          });
                                  });
@@ -5961,7 +5968,12 @@ void EffectsPanel::mouseDown (const juce::MouseEvent& e)
         const auto i = effectIn (row);
         if (i < 0)
         {
-            showAddMenu (row); // (FL: the plugin lands in this slot)
+            // upstream issue #206: a middle-click (or Alt+click) on an empty slot opens the type-to-search palette for
+            // this slot; a plain click keeps FL's menu (the plugin lands in this slot either way)
+            if (e.mods.isMiddleButtonDown() || (e.mods.isAltDown() && e.mods.isLeftButtonDown()))
+                showAddSearch (row);
+            else
+                showAddMenu (row); // (FL: the plugin lands in this slot)
             return;
         }
 
@@ -6882,9 +6894,52 @@ void EffectsPanel::openPluginWindow (int slot)
                                             tr ("This plugin could not be loaded (it is not installed or has not been scanned)."));
 }
 
+void EffectsPanel::showAddSearch (int row)
+{
+    // upstream issue #206: the Quick-add palette, opened on its effects list, adding into this empty slot
+    QuickAddTargets targets;
+    targets.effectsFirst = true;
+    targets.addInstrument = [] (ChannelDef) {}; // (an effect slot: the instruments list has nothing to add here)
+    targets.addEffect = [safe = juce::Component::SafePointer<EffectsPanel> (this), row] (EffectSlot fx) {
+        if (safe == nullptr)
+            return;
+        int at = -1;
+        safe->engine.editSong ([t = safe->track, row, &fx, &at] (Song& song) {
+            if (t < 0 || t >= (int) song.mixer.size() || (int) song.mixer[(std::size_t) t].effects.size() >= maxEffectSlots)
+                return;
+            at = mixerops::insertEffectAtRow (song, t, fx, row);
+            if (at < 0)
+            {
+                song.mixer[(std::size_t) t].effects.push_back (std::move (fx));
+                at = (int) song.mixer[(std::size_t) t].effects.size() - 1;
+            }
+            mixerops::linkAddedSidechain (song, t, at);
+        });
+        if (at < 0)
+        {
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, tr ("Quick-add palette"),
+                                                    tr ("The selected insert has no free effect slot."));
+            return;
+        }
+        safe->selectedSlot = at;
+        if ((*safe->slots())[(std::size_t) at].kind == EffectKind::plugin)
+            safe->openPluginWindow (at);
+        else
+            safe->openEditor (at);
+        safe->repaint();
+    };
+    openToolWindow (makeQuickAddPalette (engine, std::move (targets)), tr ("Quick-add palette"), "quickadd");
+}
+
 void EffectsPanel::showAddMenu (int row)
 {
     juce::PopupMenu menu;
+    // upstream issue #206: type the plugin's name instead of walking the menu (middle-click on the slot opens it too)
+    menu.addItem (tr ("Search...") + "\t" + tr ("middle-click"), [safe = juce::Component::SafePointer<EffectsPanel> (this), row] {
+        if (safe != nullptr)
+            safe->showAddSearch (row);
+    });
+    menu.addSeparator();
 
     // the effect lands in the clicked empty slot (FL's slot places, round 170b); returns its index, -1 = not added
     auto place = [this, row] (EffectSlot fx) {

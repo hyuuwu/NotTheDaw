@@ -44,6 +44,20 @@ namespace pianoroll
 constexpr int compactChordBoxWidth = 46;
 } // namespace pianoroll
 
+// The Piano roll's scale box (upstream issue #203): its list was every key x every mode (12 x the modes, "C Major",
+// "C# Major"...). Its popup now shows two columns instead, the key on the left and the mode on the right, each ticked:
+// picking a key keeps the mode and picking a mode keeps the key. The item ids stay mode * 100 + key + 1 (1 = none), so
+// everything that reads or sets the box is unchanged.
+class ScaleComboBox final : public IconComboBox
+{
+public:
+    using IconComboBox::IconComboBox;
+    void showPopup() override;
+
+private:
+    int lastRoot = 0, lastMode = 1; // what a key or mode picked while "no scale" is shown combines with
+};
+
 class PianoRollComponent final : public juce::Component,
                                  public SharesTitleBar,
                                  public ui::HintSource,
@@ -292,7 +306,7 @@ private:
     void runOperation (const std::function<std::vector<int> (Pattern&, const std::vector<int>&)>& op);
     void showMoreMenu();
     void updateScrollBars();
-    void previewOn (int key, float velocity);
+    void previewOn (int key, float velocity, bool fromKeyboard = false);
     float keyVelocityAt (int x, int key) const; // velocity of a click on the keyboard at x
     void previewOff();
     void visibilityChanged() override;
@@ -345,7 +359,7 @@ private:
     juce::ComboBox laneBox; // what the bottom lane edits: velocity, pan or fine pitch
     IconComboBox chordBox { Icon::chord }; // chord created on each click (like FL's "stamp")
     IconButton slideButton { "slide", Icon::slide }; // new notes slide (like FL's slide tool)
-    IconComboBox scaleBox { Icon::keyboard }; // scale highlighted on the keyboard rows
+    ScaleComboBox scaleBox { Icon::keyboard }; // scale highlighted on the keyboard rows (key | mode popup)
     // note colour groups (FL's 16 note colours; REA round 153): new notes get `noteColour`; the swatch opens a menu
     // that picks it, colours the selection and selects by colour
     class ColourSwatch final : public juce::Button

@@ -551,6 +551,7 @@ private:
     int knobAt (juce::Point<int> p) const;
     const std::vector<EffectSlot>* slots() const;
     void showAddMenu (int slot);
+    void showAddSearch (int slot); // the Quick-add palette adding into this empty slot (upstream issue #206)
     void showSlotMenu (int slot);
     juce::Rectangle<int> pluginButtonBounds() const;
     void openEditor (int slot);

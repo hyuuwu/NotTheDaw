@@ -30,6 +30,8 @@ std::unique_ptr<juce::AlertWindow> makeMidiImportDialog();
 // "Rename and color" dialog for patterns and channels (docs/WORKFLOW_FL.md, P1 item 4): a name field
 // and LYNX's palette (plus "automatic"); F2 inside the dialog picks a random palette color.
 // `onDone(name, colour)` runs when the user confirms (colour 0 = automatic / theme default).
+// Whether a name-and-colour dialog is open (upstream issue #179: F4 / F2 must not stack them).
+bool isNameAndColourDialogOpen();
 void showNameAndColourDialog (const juce::String& title, const juce::String& name, std::uint32_t colour,
                               std::function<void (const juce::String&, std::uint32_t)> onDone);
 
