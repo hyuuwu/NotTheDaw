@@ -317,7 +317,7 @@ PianoRollComponent::PianoRollComponent (AudioEngine& e)
     chordBubble.setInterceptsMouseClicks (false, false);
     addChildComponent (chordBubble);
 
-    for (auto* box : { &chordBox, &scaleBox })
+    for (auto* box : std::initializer_list<IconComboBox*> { &chordBox, &scaleBox })
     {
         box->setWantsKeyboardFocus (false);
         box->setMouseClickGrabsKeyboardFocus (false);
