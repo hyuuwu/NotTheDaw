@@ -58,6 +58,17 @@ std::vector<Action> makeActions()
         // upstream issue #195: Home jumps to the start of the song (or pattern) and keeps playing if it was playing;
         // the editors' own Home keys (Ctrl+Alt+Home in the Piano Roll / Playlist) still win while they are focused
         { "transport.goToStart", TR_NOOP ("Jump to the start of the song or pattern"), Context::global, { chord (home) } },
+        // FL's numpad * and / (next / previous bar; Alt+* and Alt+/ stay the marker jumps)
+        { "transport.nextBar", TR_NOOP ("Jump to the next bar"), Context::global, { chord (numpadMultiply) } },
+        { "transport.previousBar", TR_NOOP ("Jump to the previous bar"), Context::global, { chord (numpadDivide) } },
+        // FL's Alt+numpad 2 to 6: the typing keyboard's octave
+        { "typing.octave2", TR_NOOP ("Typing keyboard: octave 2"), Context::global, { chord (numpad2, alt) } },
+        { "typing.octave3", TR_NOOP ("Typing keyboard: octave 3"), Context::global, { chord (numpad3, alt) } },
+        { "typing.octave4", TR_NOOP ("Typing keyboard: octave 4"), Context::global, { chord (numpad4, alt) } },
+        { "typing.octave5", TR_NOOP ("Typing keyboard: octave 5"), Context::global, { chord (numpad5, alt) } },
+        { "typing.octave6", TR_NOOP ("Typing keyboard: octave 6"), Context::global, { chord (numpad6, alt) } },
+        // FL's Ctrl+Shift+H: arrange the windows (LYNX: the panels' default layout)
+        { "view.arrangeWindows", TR_NOOP ("Arrange windows (default layout)"), Context::global, { chord ('H', ctrl | shift) } },
         { "transport.goToEnd", TR_NOOP ("Jump to the end of the song or pattern"), Context::global, { chord (end) } },
         { "transport.nextMarker", TR_NOOP ("Jump to the next song marker (Quantize song jumps while playing)"), Context::global, { chord (numpadMultiply, alt) } },
         { "transport.previousMarker", TR_NOOP ("Jump to the previous song marker"), Context::global, { chord (numpadDivide, alt) } },
@@ -138,11 +149,23 @@ std::vector<Action> makeActions()
         { "record.captureMidi", TR_NOOP ("Capture MIDI: the notes just played without recording into the pattern"), Context::global, { chord ('R', ctrl | shift | alt) } },
 
         // files and history
-        { "file.new", TR_NOOP ("New project"), Context::global, { chord ('N', ctrl) } },
+        // FL's File menu: Ctrl+N is "Save new version" (its official shortcut list); New has no key there either
+        { "file.new", TR_NOOP ("New project"), Context::global, {} },
         { "file.open", TR_NOOP ("Open project"), Context::global, { chord ('O', ctrl) } },
         { "file.save", TR_NOOP ("Save project"), Context::global, { chord ('S', ctrl) } },
         { "file.saveAs", TR_NOOP ("Save project as"), Context::global, { chord ('S', ctrl | shift) } },
-        { "file.saveNewVersion", TR_NOOP ("Save new version (Song_2, Song_3...)"), Context::global, { chord ('S', ctrl | alt) } },
+        { "file.saveNewVersion", TR_NOOP ("Save new version (Song_2, Song_3...)"), Context::global, { chord ('N', ctrl), chord ('S', ctrl | alt) } },
+        // FL's Alt+1..9, 0: open the recent files 1 to 10 (File menu order)
+        { "file.recent1", TR_NOOP ("Open recent project 1"), Context::global, { chord ('1', alt) } },
+        { "file.recent2", TR_NOOP ("Open recent project 2"), Context::global, { chord ('2', alt) } },
+        { "file.recent3", TR_NOOP ("Open recent project 3"), Context::global, { chord ('3', alt) } },
+        { "file.recent4", TR_NOOP ("Open recent project 4"), Context::global, { chord ('4', alt) } },
+        { "file.recent5", TR_NOOP ("Open recent project 5"), Context::global, { chord ('5', alt) } },
+        { "file.recent6", TR_NOOP ("Open recent project 6"), Context::global, { chord ('6', alt) } },
+        { "file.recent7", TR_NOOP ("Open recent project 7"), Context::global, { chord ('7', alt) } },
+        { "file.recent8", TR_NOOP ("Open recent project 8"), Context::global, { chord ('8', alt) } },
+        { "file.recent9", TR_NOOP ("Open recent project 9"), Context::global, { chord ('9', alt) } },
+        { "file.recent10", TR_NOOP ("Open recent project 10"), Context::global, { chord ('0', alt) } },
         { "file.export", TR_NOOP ("Export audio"), Context::global, { chord ('R', ctrl) } },
         { "file.exportMp3", TR_NOOP ("Export an MP3 file"), Context::global, { chord ('R', ctrl | shift) } },
         { "file.exportMidi", TR_NOOP ("Export a MIDI file"), Context::global, { chord ('M', ctrl | shift) } },
@@ -182,6 +205,10 @@ std::vector<Action> makeActions()
         { "rack.pianoRollView", TR_NOOP ("Piano-roll view of all channels on/off"), Context::channelRack, {} },
         { "rack.follow", TR_NOOP ("Follow the playhead (page along with the playing step) on/off"), Context::channelRack, {} },
         { "rack.groupSelected", TR_NOOP ("Put the selected channels in a new filter group"), Context::channelRack, { chord ('G', alt) } },
+        // FL's Page Up / Page Down in the Channel Rack: the next / previous filter group; Ctrl+Enter: focus the Playlist
+        { "rack.nextGroup", TR_NOOP ("Show the next channel filter group"), Context::channelRack, { chord (pageUp) } },
+        { "rack.previousGroup", TR_NOOP ("Show the previous channel filter group"), Context::channelRack, { chord (pageDown) } },
+        { "rack.focusPlaylist", TR_NOOP ("Focus the Playlist"), Context::channelRack, { chord (enter, ctrl) } },
         { "rack.rotateLeft", TR_NOOP ("Rotate the selected channels' steps left"), Context::channelRack, { chord (left, ctrl | shift) } },
         { "rack.rotateRight", TR_NOOP ("Rotate the selected channels' steps right"), Context::channelRack, { chord (right, ctrl | shift) } },
 
@@ -263,6 +290,10 @@ std::vector<Action> makeActions()
         { "pianoRoll.tool.lasso", TR_NOOP ("Tool: Lasso (select)"), Context::pianoRoll, { chord ('E') } },
         { "pianoRoll.tool.zoom", TR_NOOP ("Tool: Zoom"), Context::pianoRoll, { chord ('Z') } },
         { "pianoRoll.tool.listen", TR_NOOP ("Tool: Listen"), Context::pianoRoll, { chord ('Y') } },
+        // FL's O (toggle portamento of the selection; Ctrl+P too) and F / Shift+F (the event lane's next / previous property)
+        { "pianoRoll.porta", TR_NOOP ("Toggle portamento on the selected notes"), Context::pianoRoll, { chord ('O') } },
+        { "pianoRoll.laneNext", TR_NOOP ("Event lane: next property"), Context::pianoRoll, { chord ('F') } },
+        { "pianoRoll.lanePrevious", TR_NOOP ("Event lane: previous property"), Context::pianoRoll, { chord ('F', shift) } },
         { "pianoRoll.slide", TR_NOOP ("Slide notes on/off (new notes)"), Context::pianoRoll, { chord ('S') } },
         // round 190an (LYNX's own option; FL has none, so no key by default): the Piano roll's Snap to scale switch
         { "pianoRoll.scaleSnap", TR_NOOP ("Snap notes to the scale on/off"), Context::pianoRoll, {} },
@@ -278,7 +309,7 @@ std::vector<Action> makeActions()
         { "playlist.zoom2", TR_NOOP ("Zoom: four bars"), Context::playlist, { chord ('2', shift) }, true },
         { "playlist.zoom3", TR_NOOP ("Zoom: sixteen bars"), Context::playlist, { chord ('3', shift) }, true },
         { "playlist.zoomAll", TR_NOOP ("Zoom to show everything"), Context::playlist, { chord ('4', shift) }, true },
-        { "playlist.zoomSelection", TR_NOOP ("Zoom to the selection"), Context::playlist, { chord ('5', shift) }, true },
+        { "playlist.zoomSelection", TR_NOOP ("Zoom to the selection"), Context::playlist, { chord ('5', shift), chord ('5') }, true },
         { "playlist.centrePlayhead", TR_NOOP ("Centre the view on the playhead"), Context::playlist, { chord ('0', shift) }, true },
         { "playlist.rippleDelete", TR_NOOP ("Delete the selected clips and close the gaps"), Context::playlist, { chord (del, shift) } },
         { "playlist.ripple", TR_NOOP ("Ripple editing on/off"), Context::playlist, { chord ('S', shift) } },
@@ -308,7 +339,7 @@ std::vector<Action> makeActions()
         { "playlist.pitchClipsDown", TR_NOOP ("Pitch selected audio clips one semitone down"), Context::playlist, { chord ('7') } },
         { "playlist.pitchClipsUp", TR_NOOP ("Pitch selected audio clips one semitone up"), Context::playlist, { chord ('8') } },
         { "playlist.reverseClips", TR_NOOP ("Reverse selected audio clips"), Context::playlist, { chord ('9') } },
-        { "playlist.quantizeStarts", TR_NOOP ("Quantize the clips' starts"), Context::playlist, { chord ('Q', ctrl) } },
+        { "playlist.quantizeStarts", TR_NOOP ("Quantize the clips' starts"), Context::playlist, { chord ('Q', ctrl), chord ('Q', shift) } },
         { "playlist.quantizeHalf", TR_NOOP ("Quantize the clips' starts 50% (halfway to the grid)"), Context::playlist, {} },
         { "playlist.follow", TR_NOOP ("Follow the playhead (auto scrolling) on/off"), Context::playlist, {} },
         { "playlist.tool.pencil", TR_NOOP ("Tool: Pencil"), Context::playlist, { chord ('P') } },
@@ -322,7 +353,7 @@ std::vector<Action> makeActions()
         { "playlist.tool.slip", TR_NOOP ("Tool: Slip"), Context::playlist, { chord ('S') } },
         // FL's Performance mode (round 165m; Ctrl+P on FL's Playlist menu [DFM])
         { "playlist.performanceMode", TR_NOOP ("Performance mode on/off (launch the clips before the Start marker)"), Context::playlist, { chord ('P', ctrl) } },
-        { "playlist.zoomPerformance", TR_NOOP ("Zoom on the performance clips"), Context::playlist, { chord ('6', shift) }, true },
+        { "playlist.zoomPerformance", TR_NOOP ("Zoom on the performance clips"), Context::playlist, { chord ('6', shift), chord ('6') }, true },
         { "playlist.perfClipProgress", TR_NOOP ("Show the performance clips' progress"), Context::playlist, {} },
         { "playlist.perfTrackProgress", TR_NOOP ("Show the performance tracks' progress"), Context::playlist, {} },
         // round 168f: FL's Playlist keys and menu items ([DFM ShortcutsModule] EEMergeAction Ctrl+G, EEClonePLTracksAction
@@ -372,6 +403,8 @@ std::vector<Action> makeActions()
         // ShortCut 49188 = Ctrl+Alt+Home, EEShiftMouseWheelNudgeAction, EECreateNewClipsWithManualFadesAction,
         // EESnapFadeHandlesAction, EESelMagicAction)
         { "playlist.makeUniqueAsSample", TR_NOOP ("Make the selected audio clips unique as samples"), Context::playlist, {} },
+        // FL's Insert in the Playlist: slice the clips under the song position (the selected ones, or every clip there)
+        { "playlist.sliceAtPlayhead", TR_NOOP ("Slice the clips at the song position"), Context::playlist, { chord (insert) } },
         { "playlist.leftResizing", TR_NOOP ("Allow resizing clips from the left on/off"), Context::playlist, { chord (home, ctrl | alt) } },
         { "playlist.wheelNudging", TR_NOOP ("Nudge clips with Shift+mouse wheel on/off"), Context::playlist, {} },
         { "playlist.manualFades", TR_NOOP ("Create new clips with manual fades on/off"), Context::playlist, {} },
@@ -406,6 +439,8 @@ std::vector<Action> makeActions()
         { "mixer.linkChannelsFrom", TR_NOOP ("Link the selected channels to inserts starting from the selected one"), Context::mixer, { chord ('L', ctrl | shift) } },
         { "mixer.selectLinkedChannels", TR_NOOP ("Select the channels linked to the selected insert"), Context::mixer, { chord ('L', alt) } },
         // FL's mixer track menu keys (round 167k, the DFM's ShortCut values: F2, S, Alt+R, Shift+Alt+R)
+        // FL's Ctrl+A in the Mixer: select every track
+        { "mixer.selectAll", TR_NOOP ("Select all mixer tracks"), Context::mixer, { chord ('A', ctrl) } },
         { "mixer.rename", TR_NOOP ("Rename and color the selected mixer track"), Context::mixer, { chord (f2) } },
         { "mixer.audioEditor", TR_NOOP ("Open the audio editor"), Context::mixer, { chord ('E', ctrl) } },
         { "mixer.audioEditorRecord", TR_NOOP ("Open the audio editor and record"), Context::mixer, { chord ('E', shift) } },

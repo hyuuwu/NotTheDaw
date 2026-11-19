@@ -8745,6 +8745,30 @@ bool PlaylistComponent::runAction (const std::string& id)
     else if (is ("playlist.quantizeHalf")) quantizeClips (0.5);
     else if (is ("playlist.performanceMode")) togglePerformanceMode();
     else if (is ("playlist.zoomPerformance")) zoomOnPerformanceClips();
+    else if (is ("playlist.sliceAtPlayhead"))
+    {
+        // FL's Insert: the clips under the song position are sliced there (the selected ones when the selection has
+        // any there, else every clip there); one undo step
+        const auto& song = engine.getSong();
+        const auto at = (std::int64_t) engine.getTransport().positionTicks.load();
+        std::vector<int> under, selectedUnder;
+        for (int i = 0; i < (int) song.playlist.size(); ++i)
+            if (const auto& c = song.playlist[(std::size_t) i]; c.gridSlot < 0 && at > c.start && at < c.end())
+            {
+                under.push_back (i);
+                if (isSelected (i))
+                    selectedUnder.push_back (i);
+            }
+        const auto& targets = selectedUnder.empty() ? under : selectedUnder;
+        if (targets.empty())
+            return false;
+        engine.editSong ([targets, at] (Song& s) {
+            for (const auto i : targets)
+                if (i < (int) s.playlist.size() && at > s.playlist[(std::size_t) i].start && at < s.playlist[(std::size_t) i].end())
+                    s.playlist.push_back (splitClip (s.playlist[(std::size_t) i], at));
+        });
+        repaint();
+    }
     else if (is ("playlist.perfClipProgress")) { showClipProgress = ! showClipProgress; repaint(); }
     else if (is ("playlist.perfTrackProgress")) { showTrackProgress = ! showTrackProgress; repaint(); }
     else if (is ("playlist.muteClips") || is ("playlist.unmuteClips"))

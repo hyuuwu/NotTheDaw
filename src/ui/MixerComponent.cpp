@@ -7686,6 +7686,12 @@ bool MixerComponent::runAction (const std::string& id)
         return strips.runMenuItem (tr ("Render armed tracks to wave file(s)..."));
     else if (id == "mixer.renderSelected")
         return strips.runMenuItem (tr ("Render selected tracks to wave file(s)..."));
+    else if (id == "mixer.selectAll") // FL's Ctrl+A
+    {
+        std::vector<int> all ((std::size_t) engine.getSong().mixer.size());
+        std::iota (all.begin(), all.end(), 0);
+        strips.setSelection (std::move (all), strips.getSelectedTrack());
+    }
     else if (id == "mixer.deleteTracks") // FL's Del: the selected mixer tracks, after its question (round 186c)
         strips.deleteSelectedTracks();
     else if (id == "mixer.deleteEffect") // FL: Delete on the selected effect slot (issue #11)

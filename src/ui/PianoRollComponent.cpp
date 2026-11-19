@@ -4658,7 +4658,18 @@ bool PianoRollComponent::runKeyAction (const std::string& id)
             return true;
         }
 
-    if (id == "pianoRoll.slide") slideButton.setToggleState (! slideButton.getToggleState(), juce::dontSendNotification);
+    if (id == "pianoRoll.porta") togglePorta(); // FL's O
+    else if (id == "pianoRoll.laneNext" || id == "pianoRoll.lanePrevious") // FL's F / Shift+F: the event lane's property
+    {
+        const auto count = laneBox.getNumItems();
+        if (count > 0)
+        {
+            const auto step = id == "pianoRoll.laneNext" ? 1 : -1;
+            const auto index = (juce::jmax (0, laneBox.getSelectedItemIndex()) + step + count) % count;
+            laneBox.setSelectedItemIndex (index, juce::sendNotificationSync);
+        }
+    }
+    else if (id == "pianoRoll.slide") slideButton.setToggleState (! slideButton.getToggleState(), juce::dontSendNotification);
     else if (id == "pianoRoll.previousChannel") stepChannel (-1, false);
     else if (id == "pianoRoll.nextChannel") stepChannel (1, false);
     else if (id == "pianoRoll.previousChannelWithNotes") stepChannel (-1, true);

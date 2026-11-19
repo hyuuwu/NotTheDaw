@@ -2194,6 +2194,22 @@ bool MainComponent::runAction (const std::string& id)
         else
             openSettings ((int) SettingsPage::general);
     }
+    else if (is ("transport.nextBar") || is ("transport.previousBar"))
+    {
+        // FL's numpad * and /: the song position one bar on or back (to the bar line), playing or not
+        const auto& song = engine.getSong();
+        const auto bar = (double) juce::jmax<std::int64_t> (1, song.barTicks());
+        const auto now = engine.getTransport().positionTicks.load();
+        const auto current = std::floor (now / bar + 1.0e-6);
+        auto target = is ("transport.nextBar") ? (current + 1.0) * bar
+                                                : (now - current * bar > bar * 0.02 ? current : current - 1.0) * bar;
+        target = juce::jmax (0.0, target);
+        if (target > 0.0)
+            engine.seek (target);
+        else
+            engine.rewind();
+        playStartTicks = target;
+    }
     else if (is ("transport.goToStart") || is ("transport.goToEnd"))
     {
         // upstream issue #195: Home / End jump to the start / end of the song (Song mode) or the current pattern;
@@ -2225,6 +2241,17 @@ bool MainComponent::runAction (const std::string& id)
         }
     }
     else if (is ("rack.groupSelected")) rack.groupSelected();
+    else if (is ("rack.nextGroup") || is ("rack.previousGroup"))
+    {
+        // FL's Page Up / Page Down: the filter groups in turn ("All" = -1 included)
+        const auto groups = (int) engine.getSong().channelGroups.size();
+        if (groups == 0)
+            return false;
+        const auto step = is ("rack.nextGroup") ? 1 : -1;
+        const auto next = ((rack.getFilterGroup() + 1 + step) % (groups + 1) + groups + 1) % (groups + 1) - 1;
+        rack.setFilterGroup (next);
+    }
+    else if (is ("rack.focusPlaylist")) showPanel (Panel::playlist);
     else if (is ("rack.rotateLeft")) rack.rotateSelected (-1);
     else if (is ("rack.rotateRight")) rack.rotateSelected (1);
     else if (is ("browser.previous")) browser.step (-1, false);
@@ -2248,6 +2275,24 @@ bool MainComponent::runAction (const std::string& id)
     else if (is ("file.save")) save (false);
     else if (is ("file.saveAs")) save (true);
     else if (is ("file.saveNewVersion")) saveNewVersion();
+    else if (id.rfind ("file.recent", 0) == 0)
+    {
+        // FL's Alt+1..9, 0: the File menu's recent projects
+        const auto index = juce::String (id.substr (11)).getIntValue() - 1;
+        const auto file = index >= 0 && index < recent.getNumFiles() ? recent.getFile (index) : juce::File();
+        if (! file.existsAsFile())
+            return false;
+        confirmDiscard ([this, file] { openFile (file); });
+    }
+    else if (id.rfind ("typing.octave", 0) == 0)
+    {
+        // FL's Alt+numpad 2..6
+        heldKeys.releaseAll();
+        typingOctave = keys::typingpiano::clampOctave (juce::String (id.substr (13)).getIntValue());
+        saveUiSettings();
+        ui::postHint ({ tr ("Typing keyboard: octave {0}", { juce::String (typingOctave) }), {} }, 1500);
+    }
+    else if (is ("view.arrangeWindows")) workspace.resetLayout();
     else if (is ("file.export")) exportAudio();
     else if (is ("file.exportMaster")) showMasterDialog (engine, currentFile.getParentDirectory(), projectName);
     else if (is ("file.exportMp3")) exportAudio (1);
