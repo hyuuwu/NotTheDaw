@@ -1,11 +1,11 @@
 ---
 title: Shortcuts
-summary: The default keyboard shortcuts of LYNX SHARE 0.1.26, by window.
+summary: The default keyboard shortcuts of LYNX SHARE 0.1.29, by window.
 status: full
 ---
 ![The Manage shortcuts window: a searchable list of actions with the keys of each](/assets/img/wiki/shortcuts.webp)
 
-These are the default keys in 0.1.26 alpha. `Help › Shortcuts` (`F1`) shows the shortcut sheet inside the app. `Options › Manage shortcuts...` opens the editor in the picture, where you change them.
+These are the default keys in 0.1.29 alpha. `Help › Shortcuts` (`F1`) shows the shortcut sheet inside the app. `Options › Manage shortcuts...` opens the editor in the picture, where you change them.
 
 > On macOS the app shows the keys with Mac names: Ctrl is shown as ⌘ and Alt as ⌥.
 
@@ -37,6 +37,9 @@ These are the default keys in 0.1.26 alpha. `Help › Shortcuts` (`F1`) shows th
 | `Ctrl+H` | Stop sound (all notes off) |
 | `Ctrl+T` | Typing keyboard to piano on or off |
 | `Alt+Numpad *` / `Alt+Numpad /` | Jump to the next or previous song marker |
+| `Numpad *` / `Numpad /` | Jump to the next or previous bar |
+| `Home` / `End` | Jump to the start or end of the song or pattern |
+| `Alt+Numpad 2` to `Alt+Numpad 6` | Typing keyboard octave 2 to 6 |
 
 Some of these keys do something else inside an editor that has focus. In the Piano roll, `Ctrl+M` imports a MIDI file and `Ctrl+B` duplicates. In the Playlist, `Ctrl+P` is Performance mode.
 
@@ -44,11 +47,11 @@ Some of these keys do something else inside an editor that has focus. In the Pia
 
 | Key | What it does |
 |---|---|
-| `Ctrl+N` | New project |
 | `Ctrl+O` | Open project |
 | `Ctrl+S` | Save |
 | `Ctrl+Shift+S` | Save as |
-| `Ctrl+Alt+S` | Save new version |
+| `Ctrl+N` or `Ctrl+Alt+S` | Save new version (as in FL Studio; New project has no key) |
+| `Alt+1` to `Alt+0` | Open recent project 1 to 10 |
 | `Ctrl+R` | Export audio |
 | `Ctrl+Shift+R` | Export an MP3 file |
 | `Ctrl+Shift+M` | Export a MIDI file |
@@ -57,6 +60,7 @@ Some of these keys do something else inside an editor that has focus. In the Pia
 | `Ctrl+Y` or `Ctrl+Shift+Z` | Redo |
 | `Ctrl+Alt+H` | Undo history |
 | `Ctrl+F` | Search the Browser |
+| `Ctrl+,` | Settings |
 
 ## Windows
 
@@ -77,6 +81,7 @@ Some of these keys do something else inside an editor that has focus. In the Pia
 | `Ctrl+F12` | Close all windows except the focused one |
 | `Alt+F7` | Touch keyboard |
 | `Ctrl+F5` | Tempo tapper |
+| `Ctrl+Shift+H` | Arrange windows (default layout) |
 | `F1` | Shortcut sheet |
 
 ## Clip View and Device View
@@ -122,6 +127,8 @@ These keys work in the Clip-launch workflow only.
 | `Alt+G` | Group the selected channels |
 | `Ctrl+L` | Send the selected channels to free Mixer inserts |
 | `Ctrl+K` | Step graph lanes on or off |
+| `Page Up` / `Page Down` | Next, previous channel filter group |
+| `Ctrl+Enter` | Focus the Playlist |
 | `1` to `0` | Mute or unmute channels 1 to 10 |
 | `Ctrl+1` to `Ctrl+0` | Solo channels 1 to 10 |
 
@@ -149,7 +156,8 @@ These keys work in the Clip-launch workflow only.
 | `Ctrl+G` | Join touching notes |
 | `Ctrl+L` | Legato |
 | `Shift+D` | Shrink the notes to the grid |
-| `Ctrl+P` | Porta on or off for the selection |
+| `Ctrl+P` or `O` | Porta on or off for the selection |
+| `F` / `Shift+F` | Event lane: next, previous property |
 | `Alt+M` / `Shift+Alt+M` | Mute, unmute the selection |
 | `Alt+V` | Ghost notes on or off |
 | `Shift+I` | Invert the selection |
@@ -213,7 +221,8 @@ Each key opens the dialog of one note tool in the Piano roll.
 | `Ctrl+Shift+G` | Merge similar pattern clips |
 | `Ctrl+Alt+G` | Merge automation clips |
 | `Ctrl+Shift+B` | Clone the selected Playlist tracks |
-| `Ctrl+Q` | Quantize the clips' starts |
+| `Ctrl+Q` or `Shift+Q` | Quantize the clips' starts |
+| `Insert` | Slice the clips at the song position |
 | `7` / `8` | Pitch the selected audio clips one semitone down, up |
 | `9` | Reverse the selected audio clips |
 | `Ctrl+Ins` / `Ctrl+Del` | Insert, remove the time selection's length on all tracks |
@@ -230,7 +239,7 @@ Each key opens the dialog of one note tool in the Piano roll.
 | `PageUp` / `PageDown` | Zoom in, out |
 | `Shift+1` / `Shift+2` / `Shift+3` | Zoom to 1, 4, 16 bars |
 | `Shift+4` | Zoom to show everything |
-| `Shift+5` | Zoom to the selection |
+| `Shift+5` or `5` | Zoom to the selection |
 | `Shift+0` | Centre the view on the playhead |
 
 ## Mixer
@@ -238,6 +247,7 @@ Each key opens the dialog of one note tool in the Piano roll.
 | Key | What it does |
 |---|---|
 | `Alt+Left` / `Alt+Right` | Move the selected inserts left, right |
+| `Ctrl+A` | Select all inserts |
 | `F2` | Rename and colour the selected insert |
 | `S` | Solo the selected inserts |
 | `Alt+S` | Solo the selected inserts with the inserts that feed them |

@@ -184,6 +184,11 @@ public:
     // "RemSeekTime" starts as 1). `seekMarkSongMode`: the mark is a Song position (else a pattern position);
     // `seekMarkSerial` counts the clicks, so the transport sees a click made while it plays.
     bool rememberSeek = true;
+    // upstream issue #183: the Piano roll previews the notes drawn or moved while the song plays (off, as in FL: they
+    // would sound out of time over the music). Its keyboard always plays. Saved with the UI options.
+    bool previewNotesWhilePlaying = false;
+    // upstream issue #205: the Piano roll tints the rows of the selected notes across the grid (as FL does). On by default.
+    bool highlightSelectedRows = true;
     std::int64_t seekMark = -1;
     bool seekMarkSongMode = true;
     std::uint32_t seekMarkSerial = 0;

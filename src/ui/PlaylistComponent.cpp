@@ -6667,13 +6667,32 @@ juce::PopupMenu PlaylistComponent::buildTrackMenu (int track)
     ui::addItemHeader (menu, tr ("Playlist track"), ! info.name.empty() ? juce::String::fromUTF8 (info.name.c_str()) : tr ("Track {0}", { juce::String (track + 1) }),
                        info.colour != 0 ? juce::Colour (info.colour) : juce::Colour());
     menu.addItem (theme::mnemonic (tr ("Rename and color..."), 'R'), [this, track] { renameTrack (track); });
-    menu.addSubMenu (tr ("Change color"), ui::colourMenu (info.colour, [this, track] (std::uint32_t colour) {
-                         editTrack (track, [colour] (PlaylistTrack& t) { t.colour = colour; });
+    // upstream issue #201: the colour items colour every selected track when the menu's track is one of them
+    menu.addSubMenu (tr ("Change color"), ui::colourMenu (info.colour, [this, tracks = tracksForMenu (track)] (std::uint32_t colour) {
+                         engine.editSong ([tracks, colour] (Song& s) { // (one undo step for all of them)
+                             for (const auto t : tracks)
+                                 if (t >= 0)
+                                 {
+                                     if ((int) s.playlistTracks.size() <= t)
+                                         s.playlistTracks.resize ((std::size_t) t + 1);
+                                     s.playlistTracks[(std::size_t) t].colour = colour;
+                                 }
+                         });
                      }, juce::Rectangle<int> (juce::Desktop::getMousePosition().x, juce::Desktop::getMousePosition().y, 1, 1)));
-    menu.addItem (tr ("Random color"), [this, track] {
+    menu.addItem (tr ("Random color"), [this, tracks = tracksForMenu (track)] {
         const auto& palette = lynxPalette();
-        const auto c = palette[(std::size_t) juce::Random::getSystemRandom().nextInt ((int) palette.size())];
-        editTrack (track, [c] (PlaylistTrack& t) { t.colour = c; });
+        std::vector<std::uint32_t> colours;
+        for (std::size_t i = 0; i < tracks.size(); ++i)
+            colours.push_back (palette[(std::size_t) juce::Random::getSystemRandom().nextInt ((int) palette.size())]);
+        engine.editSong ([tracks, colours] (Song& s) { // (one undo step for all of them)
+            for (std::size_t i = 0; i < tracks.size(); ++i)
+                if (const auto t = tracks[i]; t >= 0)
+                {
+                    if ((int) s.playlistTracks.size() <= t)
+                        s.playlistTracks.resize ((std::size_t) t + 1);
+                    s.playlistTracks[(std::size_t) t].colour = colours[i];
+                }
+        });
     });
     // FL's "Change icon" (EEPLTrackIconMenuClick, REA round 168h); LYNX's own icon set
     menu.addItem (tr ("Change icon..."), [this, track, current = info.icon] {
@@ -7039,10 +7058,10 @@ void PlaylistComponent::renameTrack (int track)
     const auto current = track < (int) tracks.size() ? juce::String::fromUTF8 (tracks[(std::size_t) track].name.c_str()) : juce::String();
     const auto colour = track < (int) tracks.size() ? tracks[(std::size_t) track].colour : 0u;
     showNameAndColourDialog (tr ("Rename track"), current.isNotEmpty() ? current : tr ("Track {0}", { juce::String (track + 1) }), colour,
-                             [this, track] (const juce::String& newName, std::uint32_t newColour) {
+                             [this, track, others = tracksForMenu (track)] (const juce::String& newName, std::uint32_t newColour) {
                                  const auto name = newName.trim().toStdString();
                                  const auto together = simpleHeaders && simpletracks::kindOf (engine.getSong(), track).has_value();
-                                 engine.editSong ([track, name, newColour, together] (Song& s) {
+                                 engine.editSong ([track, others, name, newColour, together] (Song& s) {
                                      if ((int) s.playlistTracks.size() <= track)
                                          s.playlistTracks.resize ((std::size_t) track + 1);
                                      if (together) // (the Simple workflow: the track, its insert and its channel, round 184a)
@@ -7052,6 +7071,16 @@ void PlaylistComponent::renameTrack (int track)
                                          return;
                                      }
                                      s.playlistTracks[(std::size_t) track].name = name;
+                                     // upstream issue #201: with several tracks selected the colour goes to all of them
+                                     // (the name stays the clicked track's)
+                                     for (const auto t : others)
+                                     {
+                                         if (t < 0)
+                                             continue;
+                                         if ((int) s.playlistTracks.size() <= t)
+                                             s.playlistTracks.resize ((std::size_t) t + 1);
+                                         s.playlistTracks[(std::size_t) t].colour = newColour;
+                                     }
                                      s.playlistTracks[(std::size_t) track].colour = newColour;
                                  });
                              });
@@ -8716,6 +8745,30 @@ bool PlaylistComponent::runAction (const std::string& id)
     else if (is ("playlist.quantizeHalf")) quantizeClips (0.5);
     else if (is ("playlist.performanceMode")) togglePerformanceMode();
     else if (is ("playlist.zoomPerformance")) zoomOnPerformanceClips();
+    else if (is ("playlist.sliceAtPlayhead"))
+    {
+        // FL's Insert: the clips under the song position are sliced there (the selected ones when the selection has
+        // any there, else every clip there); one undo step
+        const auto& song = engine.getSong();
+        const auto at = (std::int64_t) engine.getTransport().positionTicks.load();
+        std::vector<int> under, selectedUnder;
+        for (int i = 0; i < (int) song.playlist.size(); ++i)
+            if (const auto& c = song.playlist[(std::size_t) i]; c.gridSlot < 0 && at > c.start && at < c.end())
+            {
+                under.push_back (i);
+                if (isSelected (i))
+                    selectedUnder.push_back (i);
+            }
+        const auto& targets = selectedUnder.empty() ? under : selectedUnder;
+        if (targets.empty())
+            return false;
+        engine.editSong ([targets, at] (Song& s) {
+            for (const auto i : targets)
+                if (i < (int) s.playlist.size() && at > s.playlist[(std::size_t) i].start && at < s.playlist[(std::size_t) i].end())
+                    s.playlist.push_back (splitClip (s.playlist[(std::size_t) i], at));
+        });
+        repaint();
+    }
     else if (is ("playlist.perfClipProgress")) { showClipProgress = ! showClipProgress; repaint(); }
     else if (is ("playlist.perfTrackProgress")) { showTrackProgress = ! showTrackProgress; repaint(); }
     else if (is ("playlist.muteClips") || is ("playlist.unmuteClips"))
@@ -11275,6 +11328,37 @@ void PatternPicker::mouseUp (const juce::MouseEvent& e)
     pickersel::leftUp (picked, list[(std::size_t) i].index, flmods::ctrl (e.mods), e.mods.isShiftDown(), deselectOnUp);
     deselectOnUp = false;
     repaint();
+}
+
+void PatternPicker::mouseDrag (const juce::MouseEvent& e)
+{
+    // upstream issue #177: a pattern dragged out of the picker drops onto the Playlist as a clip where it is released
+    // (the drop is the one the Browser's "Current project" patterns already use)
+    if (pressedRow < 0 || e.getDistanceFromDragStart() < 6 || ! e.mods.isLeftButtonDown())
+        return;
+    const auto list = rows();
+    if (pressedRow >= (int) list.size() || list[(std::size_t) pressedRow].kind != ClipKind::pattern)
+        return;
+    auto* container = juce::DragAndDropContainer::findParentDragContainerFor (this);
+    if (container == nullptr || container->isDragAndDropActive())
+        return;
+    const auto& row = list[(std::size_t) pressedRow];
+    pressedRow = -1; // (the release ends the drag, not a pick)
+    deselectOnUp = false;
+
+    const auto font = theme::font (theme::type::small, true);
+    const auto w = juce::jlimit (60, 220, juce::GlyphArrangement::getStringWidthInt (font, row.name) + 16);
+    juce::Image image (juce::Image::ARGB, w, 22, true);
+    {
+        juce::Graphics g (image);
+        g.setColour (row.colour.withAlpha (0.9f));
+        g.fillRoundedRectangle (image.getBounds().toFloat().reduced (1.0f), 3.0f);
+        g.setColour (row.colour.contrasting (0.8f));
+        g.setFont (font);
+        g.drawText (row.name, image.getBounds().reduced (6, 0), juce::Justification::centredLeft, true);
+    }
+    container->startDragging (juce::String (BrowserComponent::patternDragDescription) + "|" + juce::String (row.index), this,
+                              juce::ScaledImage (image), true);
 }
 
 std::vector<int> PatternPicker::pickedPatterns() const

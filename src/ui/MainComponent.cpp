@@ -2050,6 +2050,7 @@ bool MainComponent::runAction (const std::string& id)
     else if (is ("pattern.next")) selectPattern (stepPattern (engine.getSong(), 1));
     else if (is ("pattern.previous")) selectPattern (stepPattern (engine.getSong(), -1));
     else if (is ("pattern.nextEmpty")) nextEmptyPattern();
+    else if (is ("pattern.firstEmpty") && isNameAndColourDialogOpen()) {}
     else if (is ("pattern.firstEmpty")) { engine.editSong ([] (Song& s) { gotoFirstEmptyPattern (s); }); showRenamePattern (engine.getSong().currentPattern); }
     else if (is ("pattern.nextEmptyNoName")) engine.editSong ([] (Song& s) { gotoNextEmptyPattern (s); });
     else if (is ("pattern.delete")) deleteCurrentPattern();
@@ -2185,6 +2186,45 @@ bool MainComponent::runAction (const std::string& id)
             case keys::SettingsKey::open: openSettings ((int) page); break;
         }
     }
+    else if (is ("view.settings"))
+    {
+        // upstream issue #181: Ctrl+, opens Settings on its General page; again = closed
+        if (shownSettingsPage() >= 0)
+            closeSettings();
+        else
+            openSettings ((int) SettingsPage::general);
+    }
+    else if (is ("transport.nextBar") || is ("transport.previousBar"))
+    {
+        // FL's numpad * and /: the song position one bar on or back (to the bar line), playing or not
+        const auto& song = engine.getSong();
+        const auto bar = (double) juce::jmax<std::int64_t> (1, song.barTicks());
+        const auto now = engine.getTransport().positionTicks.load();
+        const auto current = std::floor (now / bar + 1.0e-6);
+        auto target = is ("transport.nextBar") ? (current + 1.0) * bar
+                                                : (now - current * bar > bar * 0.02 ? current : current - 1.0) * bar;
+        target = juce::jmax (0.0, target);
+        if (target > 0.0)
+            engine.seek (target);
+        else
+            engine.rewind();
+        playStartTicks = target;
+    }
+    else if (is ("transport.goToStart") || is ("transport.goToEnd"))
+    {
+        // upstream issue #195: Home / End jump to the start / end of the song (Song mode) or the current pattern;
+        // playback keeps running from there, and a later Stop or Space comes back to the new position
+        const auto& song = engine.getSong();
+        const auto toEnd = is ("transport.goToEnd");
+        double target = 0.0;
+        if (toEnd)
+            target = (double) (song.mode == PlayMode::song ? song.songLength() : song.activePattern().effectiveLength (song.meter()));
+        if (target > 0.0)
+            engine.seek (target);
+        else
+            engine.rewind();
+        playStartTicks = target;
+    }
     else if (is ("view.closeUnfocusedWindows")) closeUnfocusedWindows();
     else if (is ("view.alignChannelEditors")) alignAllChannelEditors (engine.getSelectedChannel());
     else if (is ("view.touchKeyboard")) toggleTouchKeyboard (engine);
@@ -2201,6 +2241,17 @@ bool MainComponent::runAction (const std::string& id)
         }
     }
     else if (is ("rack.groupSelected")) rack.groupSelected();
+    else if (is ("rack.nextGroup") || is ("rack.previousGroup"))
+    {
+        // FL's Page Up / Page Down: the filter groups in turn ("All" = -1 included)
+        const auto groups = (int) engine.getSong().channelGroups.size();
+        if (groups == 0)
+            return false;
+        const auto step = is ("rack.nextGroup") ? 1 : -1;
+        const auto next = ((rack.getFilterGroup() + 1 + step) % (groups + 1) + groups + 1) % (groups + 1) - 1;
+        rack.setFilterGroup (next);
+    }
+    else if (is ("rack.focusPlaylist")) showPanel (Panel::playlist);
     else if (is ("rack.rotateLeft")) rack.rotateSelected (-1);
     else if (is ("rack.rotateRight")) rack.rotateSelected (1);
     else if (is ("browser.previous")) browser.step (-1, false);
@@ -2224,6 +2275,24 @@ bool MainComponent::runAction (const std::string& id)
     else if (is ("file.save")) save (false);
     else if (is ("file.saveAs")) save (true);
     else if (is ("file.saveNewVersion")) saveNewVersion();
+    else if (id.rfind ("file.recent", 0) == 0)
+    {
+        // FL's Alt+1..9, 0: the File menu's recent projects
+        const auto index = juce::String (id.substr (11)).getIntValue() - 1;
+        const auto file = index >= 0 && index < recent.getNumFiles() ? recent.getFile (index) : juce::File();
+        if (! file.existsAsFile())
+            return false;
+        confirmDiscard ([this, file] { openFile (file); });
+    }
+    else if (id.rfind ("typing.octave", 0) == 0)
+    {
+        // FL's Alt+numpad 2..6
+        heldKeys.releaseAll();
+        typingOctave = keys::typingpiano::clampOctave (juce::String (id.substr (13)).getIntValue());
+        saveUiSettings();
+        ui::postHint ({ tr ("Typing keyboard: octave {0}", { juce::String (typingOctave) }), {} }, 1500);
+    }
+    else if (is ("view.arrangeWindows")) workspace.resetLayout();
     else if (is ("file.export")) exportAudio();
     else if (is ("file.exportMaster")) showMasterDialog (engine, currentFile.getParentDirectory(), projectName);
     else if (is ("file.exportMp3")) exportAudio (1);
@@ -2695,6 +2764,10 @@ void MainComponent::loadUiSettings()
             ChannelRackComponent::completePreview.store (on);
         else if (key == "rememberSeekTime") // (issue #169: the old "rememberSeek" key held LYNX's old default, off; FL's is on)
             EditorGlobals::get().rememberSeek = on;
+        else if (key == "prPreviewWhilePlaying")
+            EditorGlobals::get().previewNotesWhilePlaying = on;
+        else if (key == "prHighlightSelectedRows")
+            EditorGlobals::get().highlightSelectedRows = on;
         else if (key == "createVariants")
             EditorGlobals::get().createVariants = on;
         else if (key == "plLeftResizing") // round 189g: FL's Playlist Edit / Select options
@@ -2993,6 +3066,8 @@ void MainComponent::saveUiSettings()
                                       + "\npluginStyle=" + juce::String (skin::forcedStyle() < 0 ? "Automatic" : skin::styleName ((skin::Style) skin::forcedStyle()))
                                       + "\npluginStyleOverrides=" + skin::overridesToString()
                                       + "\nrememberSeekTime=" + juce::String (EditorGlobals::get().rememberSeek ? 1 : 0)
+                                      + "\nprPreviewWhilePlaying=" + juce::String (EditorGlobals::get().previewNotesWhilePlaying ? 1 : 0)
+                                      + "\nprHighlightSelectedRows=" + juce::String (EditorGlobals::get().highlightSelectedRows ? 1 : 0)
                                       + "\ncreateVariants=" + juce::String (EditorGlobals::get().createVariants ? 1 : 0)
                                       + "\nplLeftResizing=" + juce::String (EditorGlobals::get().leftResizing ? 1 : 0)
                                       + "\nplWheelNudging=" + juce::String (EditorGlobals::get().wheelNudging ? 1 : 0)
@@ -3996,6 +4071,8 @@ void MainComponent::stepPatternFromSelector (int delta)
 
 void MainComponent::nextEmptyPattern()
 {
+    if (isNameAndColourDialogOpen()) // (upstream issue #179: F4 again while naming doesn't skip ahead)
+        return;
     engine.editSong ([] (Song& s) { gotoNextEmptyPattern (s); });
     showRenamePattern (engine.getSong().currentPattern);
 }

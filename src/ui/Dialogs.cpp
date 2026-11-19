@@ -523,10 +523,32 @@ std::unique_ptr<juce::AlertWindow> makeNameAndColourDialog (const juce::String& 
     return std::make_unique<NameAndColourWindow> (title, name, colour);
 }
 
+namespace
+{
+juce::Component::SafePointer<juce::Component>& openNameAndColourWindow()
+{
+    static juce::Component::SafePointer<juce::Component> open;
+    return open;
+}
+}
+
+bool isNameAndColourDialogOpen()
+{
+    return openNameAndColourWindow() != nullptr;
+}
+
 void showNameAndColourDialog (const juce::String& title, const juce::String& name, std::uint32_t colour,
                               std::function<void (const juce::String&, std::uint32_t)> onDone)
 {
+    // upstream issue #179: one name dialog at a time. A key that opens it (F2, F4) pressed again while it shows brings
+    // the open one to the front instead of stacking another (spamming F4 stacked dozens and could crash)
+    if (auto* open = openNameAndColourWindow().getComponent())
+    {
+        open->toFront (true);
+        return;
+    }
     auto* window = new NameAndColourWindow (title, name, colour);
+    openNameAndColourWindow() = window;
     window->enterModalState (true, juce::ModalCallbackFunction::create ([window, onDone] (int result) {
                                  const auto typed = window->getTextEditorContents ("name").trim();
 

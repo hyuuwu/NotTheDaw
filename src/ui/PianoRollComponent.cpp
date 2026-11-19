@@ -317,7 +317,7 @@ PianoRollComponent::PianoRollComponent (AudioEngine& e)
     chordBubble.setInterceptsMouseClicks (false, false);
     addChildComponent (chordBubble);
 
-    for (auto* box : { &chordBox, &scaleBox })
+    for (auto* box : std::initializer_list<IconComboBox*> { &chordBox, &scaleBox })
     {
         box->setWantsKeyboardFocus (false);
         box->setMouseClickGrabsKeyboardFocus (false);
@@ -708,6 +708,49 @@ std::vector<int> PianoRollComponent::chordIntervals() const
     return intervals;
 }
 
+void ScaleComboBox::showPopup()
+{
+    const auto id = getSelectedId();
+    const auto mode = id <= 1 ? 0 : id / 100;
+    const auto root = id <= 1 ? lastRoot : (id % 100) - 1;
+    if (mode > 0)
+    {
+        lastRoot = root;
+        lastMode = mode;
+    }
+
+    enum { noneId = 1, keyBase = 1000, modeBase = 2000 };
+    juce::PopupMenu menu;
+    menu.addItem (noneId, tr (scales()[0].name), true, mode == 0);
+    menu.addSectionHeader (tr ("Key"));
+    for (int k = 0; k < 12; ++k)
+        menu.addItem (keyBase + k, juce::String (notenames::pitchName (k)), true, mode > 0 && k == root);
+    menu.addColumnBreak();
+    menu.addSectionHeader (tr ("Mode"));
+    for (int m = 1; m < (int) scales().size(); ++m)
+        menu.addItem (modeBase + m, tr (scales()[(std::size_t) m].name), true, m == mode);
+
+    auto& lf = getLookAndFeel();
+    menu.setLookAndFeel (&lf);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withMinimumWidth (getWidth()),
+                        [safe = juce::Component::SafePointer<ScaleComboBox> (this)] (int result) {
+                            if (safe == nullptr)
+                                return;
+                            safe->hidePopup();
+                            if (result == 0)
+                                return;
+                            const auto current = safe->getSelectedId();
+                            const auto curMode = current <= 1 ? 0 : current / 100;
+                            const auto curRoot = current <= 1 ? safe->lastRoot : (current % 100) - 1;
+                            int newId = noneId;
+                            if (result >= modeBase)
+                                newId = (result - modeBase) * 100 + curRoot + 1;
+                            else if (result >= keyBase)
+                                newId = (curMode > 0 ? curMode : safe->lastMode) * 100 + (result - keyBase) + 1;
+                            safe->setSelectedId (newId, juce::sendNotificationSync);
+                        });
+}
+
 int PianoRollComponent::scaleIndex() const
 {
     const auto id = scaleBox.getSelectedId();
@@ -997,6 +1040,16 @@ void PianoRollComponent::paint (juce::Graphics& g)
         juce::Graphics::ScopedSaveState state (g);
         g.reduceClipRegion (grid);
 
+        // upstream issue #205 (FL's selected-note row highlight): the rows of the selected notes are tinted across the
+        // whole grid, to compare them with the other notes and chords of the pattern. View › "Highlight rows of
+        // selected notes" turns it off.
+        std::array<bool, 128> selectedRows {};
+        if (EditorGlobals::get().highlightSelectedRows)
+            for (auto index : selection)
+                if (index >= 0 && index < (int) pattern.notes.size())
+                    if (const auto k = pattern.notes[(std::size_t) index].key; k >= 0 && k < 128)
+                        selectedRows[(std::size_t) k] = true;
+
         for (int key = 0; key < 128; ++key)
         {
             const auto y = keyToY (key);
@@ -1008,6 +1061,8 @@ void PianoRollComponent::paint (juce::Graphics& g)
             auto row = gridHighlights && isBlackKey (key) ? rowBlack : rowWhite;
             if (gridHighlights && inScale (key))
                 row = row.interpolatedWith (info, 0.10f);
+            if (selectedRows[(std::size_t) key])
+                row = row.interpolatedWith (accent, 0.11f);
             if (key == hover.key && drag == Drag::none)
                 row = row.interpolatedWith (textPrimary, 0.04f); // the row under the mouse
             g.setColour (row);
@@ -1644,10 +1699,17 @@ float PianoRollComponent::keyVelocityAt (int x, int key) const
     return gesture::keyClickVelocity ((double) x, (double) (isBlackKey (key) ? keyboardWidth * 3 / 5 : keyboardWidth - 1));
 }
 
-void PianoRollComponent::previewOn (int key, float velocity)
+void PianoRollComponent::previewOn (int key, float velocity, bool fromKeyboard)
 {
     // one preview note at a time; it remembers its channel, so a channel switch meanwhile can't strand it
     previewNotes.releaseAll();
+    // upstream issue #183: as in FL, notes drawn, moved or resized while the song plays are not previewed (they would
+    // sound over the music out of time); View › "Preview notes during playback" brings it back. The keyboard always plays.
+    if (! fromKeyboard && ! EditorGlobals::get().previewNotesWhilePlaying && engine.getTransport().playing.load())
+    {
+        previewOff();
+        return;
+    }
     previewKey = key;
     previewNotes.press (engine.getSelectedChannel(), key, velocity);
     repaint (0, headerHeight, keyboardWidth, getHeight());
@@ -1962,7 +2024,7 @@ void PianoRollComponent::mouseDown (const juce::MouseEvent& e)
         if (e.mods.isLeftButtonDown())
         {
             drag = Drag::keyboard;
-            previewOn (keyboardKeyAt (e.x, e.y), keyVelocityAt (e.x, keyboardKeyAt (e.x, e.y)));
+            previewOn (keyboardKeyAt (e.x, e.y), keyVelocityAt (e.x, keyboardKeyAt (e.x, e.y)), true);
         }
         return;
     }
@@ -2338,7 +2400,7 @@ void PianoRollComponent::mouseDrag (const juce::MouseEvent& e)
         {
             const auto key = keyboardKeyAt (e.x, e.y);
             if (key != previewKey)
-                previewOn (key, keyVelocityAt (e.x, key));
+                previewOn (key, keyVelocityAt (e.x, key), true);
             return;
         }
 
@@ -4596,7 +4658,18 @@ bool PianoRollComponent::runKeyAction (const std::string& id)
             return true;
         }
 
-    if (id == "pianoRoll.slide") slideButton.setToggleState (! slideButton.getToggleState(), juce::dontSendNotification);
+    if (id == "pianoRoll.porta") togglePorta(); // FL's O
+    else if (id == "pianoRoll.laneNext" || id == "pianoRoll.lanePrevious") // FL's F / Shift+F: the event lane's property
+    {
+        const auto count = laneBox.getNumItems();
+        if (count > 0)
+        {
+            const auto step = id == "pianoRoll.laneNext" ? 1 : -1;
+            const auto index = (juce::jmax (0, laneBox.getSelectedItemIndex()) + step + count) % count;
+            laneBox.setSelectedItemIndex (index, juce::sendNotificationSync);
+        }
+    }
+    else if (id == "pianoRoll.slide") slideButton.setToggleState (! slideButton.getToggleState(), juce::dontSendNotification);
     else if (id == "pianoRoll.previousChannel") stepChannel (-1, false);
     else if (id == "pianoRoll.nextChannel") stepChannel (1, false);
     else if (id == "pianoRoll.previousChannelWithNotes") stepChannel (-1, true);
@@ -5264,6 +5337,17 @@ juce::PopupMenu PianoRollComponent::viewMenu()
                   [this] { runAction ("pianoRoll.showChordName"); });
     menu.addItem (tr ("Background waveform") + keyText ("pianoRoll.backgroundWave"), true, isBackgroundWaveShown(),
                   [this] { runAction ("pianoRoll.backgroundWave"); });
+    menu.addItem (tr ("Highlight rows of selected notes"), true, EditorGlobals::get().highlightSelectedRows, [this] {
+        EditorGlobals::get().highlightSelectedRows = ! EditorGlobals::get().highlightSelectedRows;
+        if (EditorGlobals::get().onOptionsChanged)
+            EditorGlobals::get().onOptionsChanged();
+        repaint();
+    });
+    menu.addItem (tr ("Preview notes during playback"), true, EditorGlobals::get().previewNotesWhilePlaying, [] {
+        EditorGlobals::get().previewNotesWhilePlaying = ! EditorGlobals::get().previewNotesWhilePlaying;
+        if (EditorGlobals::get().onOptionsChanged)
+            EditorGlobals::get().onOptionsChanged();
+    });
     menu.addItem (tr ("Ruler: song bars (LYNX)") + keyText ("pianoRoll.songBarsRuler"), true, songBarsRuler, [this] { runAction ("pianoRoll.songBarsRuler"); });
     {
         // round 190j (discussion #136): flat = LYNX's keyboard so far, the default. (FL 2026's own keyboard has the white
