@@ -1,0 +1,104 @@
+name: Build
+
+# Builds the app and runs the core tests on every work branch that tests.yml doesn't cover (tests.yml runs on main,
+# wip/** and pull requests; round-build.yml on ci/**), and keeps the Linux build as a downloadable artifact, so a
+# branch can be tried without building it locally. Also runs by hand (Actions › Build › Run workflow).
+on:
+  push:
+    branches-ignore: [main, 'wip/**', 'ci/**']
+    paths-ignore: ['website/**', 'store/**', 'server/**', '**.md']
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the older run
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  JUCE_VERSION: 8.0.4
+  JUCE_SHA256: 0effe9823a6fd8a4f98e5c08be7d308350e417b2d15dcf34011e778fefbbf005
+
+jobs:
+  linux:
+    name: Linux app and core tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 1500M
+      CCACHE_COMPILERCHECK: content
+    steps:
+      - uses: actions/checkout@v5
+
+      # (the runners' package mirror sometimes fails to resolve for a minute: try again instead of failing the job)
+      - name: Build dependencies
+        run: |
+          for i in 1 2 3 4 5 6; do
+            sudo apt-get update -q && sudo apt-get install -y -q ccache ninja-build pkg-config xvfb libasound2-dev libjack-jackd2-dev libx11-dev libxrandr-dev \
+              libxinerama-dev libxcursor-dev libxext-dev libxcomposite-dev libfreetype-dev libfontconfig1-dev libgl-dev && break
+            [ $i = 6 ] && exit 1; sleep 30
+          done
+
+      # tests.yml's app cache (saved by main) as the starting point; this workflow only reads it
+      - uses: actions/cache/restore@v4
+        with:
+          path: .ccache
+          key: ccache-app-ubuntu-24.04-${{ github.sha }}
+          restore-keys: ccache-app-ubuntu-24.04-
+
+      - name: JUCE (checksum verified)
+        run: |
+          curl -fsSL -o juce.tar.gz "https://github.com/juce-framework/JUCE/archive/refs/tags/$JUCE_VERSION.tar.gz"
+          echo "$JUCE_SHA256  juce.tar.gz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/juce" && tar xzf juce.tar.gz -C "$RUNNER_TEMP/juce" --strip-components 1 && rm juce.tar.gz
+
+      - name: Build the app and the core tests
+        run: |
+          ccache --zero-stats > /dev/null
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_SOURCE_DIR_JUCE="$RUNNER_TEMP/juce" \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DLYNX_LTO=OFF
+          cmake --build build --target LYNX lynx_tests -- -k 0
+          ccache --show-stats || true
+
+      # every test except the slow ones listed in tests/heavy-tests.txt (tests.yml runs those too, on main and PRs)
+      - name: Core tests
+        env:
+          LYNX_TEST_SKIP_HEAVY: 1
+          LYNX_TEST_LOGS: ${{ github.workspace }}/test-logs
+        run: ./scripts/run-tests.sh -j auto build/lynx_tests
+
+      - name: Self-test
+        run: |
+          xvfb-run -a build/LYNX_artefacts/Release/LYNX --selftest "$PWD/selftest.txt" "$PWD/selftest-demo.lynx" < /dev/null || true
+          cat selftest.txt
+          grep -q '^result=OK' selftest.txt
+
+      - name: Package the Linux build
+        run: |
+          name="LYNX-${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}-linux-x86_64"
+          mkdir -p "dist/$name"
+          cp build/LYNX_artefacts/Release/LYNX "dist/$name/"
+          cp LICENSE "dist/$name/"
+          tar czf "dist/$name.tar.gz" -C dist "$name"
+          echo "PACKAGE=$name" >> "$GITHUB_ENV"
+
+      - name: Upload the Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE }}
+          path: dist/${{ env.PACKAGE }}.tar.gz
+          retention-days: 14
+
+      - name: Upload the test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-logs
+          path: |
+            test-logs
+            selftest.txt
+          retention-days: 7
+          if-no-files-found: ignore
